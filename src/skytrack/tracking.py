@@ -110,6 +110,21 @@ class ByteTracker:
         self.tracks: list[Track] = []
         self._ids = itertools.count(1)
 
+    def compensate(self, warp) -> None:
+        """Move every track by known camera motion before the next ``update``.
+
+        ``warp`` maps pixel coordinates (N, 2) in the previous frame to the current one. On a
+        drone the ground moves tens of pixels per frame, far more than a constant-velocity
+        model learns in time for a short-lived track, so IoU matching fails without this.
+        """
+        for t in self.tracks:
+            x0, y0, x1, y1 = t.box
+            corners = np.asarray(warp(np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], np.float64)))
+            if not np.isfinite(corners).all():
+                continue
+            lo, hi = corners.min(0), corners.max(0)
+            t.mean[:4] = kalman.xyxy_to_xyah(np.r_[lo, hi])
+
     def update(self, dets: Detections) -> list[TrackOutput]:
         self.frame += 1
         high = dets[dets.scores >= self.high_thresh]
