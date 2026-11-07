@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skytrack"
-version = "0.1.0"
-description = "Small-object detection and multi-object tracking for drone video"
+version = "0.2.0"
+description = "Drone road inspection: pothole detection, measurement, geotagging and wire avoidance"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -16,6 +16,9 @@ dependencies = ["numpy>=1.24", "scipy>=1.10", "opencv-python-headless>=4.8"]
 train = ["ultralytics>=8.3"]
 onnx = ["onnxruntime>=1.17"]
 dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+skytrack = "skytrack.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
