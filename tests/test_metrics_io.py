@@ -4,7 +4,7 @@ import pytest
 from skytrack import Detections, detection_map, mot_metrics
 from skytrack.detectors import decode_yolov8, letterbox, unletterbox
 from skytrack.metrics import average_precision
-from skytrack.visdrone import parse_annotation, to_yolo_lines
+from skytrack.rdd2022 import parse_voc, to_yolo
 
 
 def D(boxes, scores, classes):
@@ -60,19 +60,30 @@ def test_mot_fp_fn():
     assert m["mota"] == pytest.approx(1 - 3 / 2)
 
 
-def test_visdrone_parsing_drops_ignored_and_others():
-    text = "10,20,30,40,1,4,0,0\n0,0,50,50,0,0,0,0\n5,5,10,10,1,11,0,0\n1,1,0,5,1,1,0,0\n7,8,9,10,1,1,0,1,\n"
-    boxes, classes = parse_annotation(text)
-    assert classes.tolist() == [3, 0]
-    assert boxes.tolist() == [[10, 20, 30, 40], [7, 8, 9, 10]]
+RDD_XML = """<annotation><size><width>600</width><height>600</height><depth>3</depth></size>
+<object><name>D40</name><bndbox><xmin>100</xmin><ymin>200</ymin><xmax>160</xmax><ymax>260</ymax></bndbox></object>
+<object><name>D00</name><bndbox><xmin>10</xmin><ymin>10</ymin><xmax>20</xmax><ymax>300</ymax></bndbox></object>
+<object><name>Repair</name><bndbox><xmin>0</xmin><ymin>0</ymin><xmax>50</xmax><ymax>50</ymax></bndbox></object>
+<object><name>D40</name><bndbox><xmin>590</xmin><ymin>590</ymin><xmax>640</xmax><ymax>640</ymax></bndbox></object>
+</annotation>"""
+
+
+def test_rdd2022_parsing_keeps_known_classes():
+    w, h, objs = parse_voc(RDD_XML)
+    assert (w, h) == (600, 600)
+    assert [o[0] for o in objs] == [3, 0, 3]  # Repair dropped; D40 is class 3 of four
+    _, _, potholes = parse_voc(RDD_XML, classes=["D40"])
+    assert [o[0] for o in potholes] == [0, 0]
 
 
 def test_yolo_lines_are_normalised_and_clipped():
-    lines = to_yolo_lines(np.array([[90.0, 40, 20, 20]]), np.array([2]), 100, 50)
-    cls, cx, cy, w, h = lines[0].split()
-    assert cls == "2"
-    assert float(cx) == pytest.approx(0.95) and float(w) == pytest.approx(0.1)
-    assert float(cy) == pytest.approx(0.9) and float(h) == pytest.approx(0.2)
+    w, h, objs = parse_voc(RDD_XML, classes=["D40"])
+    first, edge = to_yolo(w, h, objs)
+    cls, cx, cy, bw, bh = first.split()
+    assert cls == "0"
+    assert float(cx) == pytest.approx(130 / 600, abs=1e-6) and float(bw) == pytest.approx(60 / 600, abs=1e-6)
+    _, cx, cy, bw, bh = (float(x) for x in edge.split())
+    assert cx + bw / 2 <= 1.0 + 1e-6 and cy + bh / 2 <= 1.0 + 1e-6  # box running off the image is clipped
 
 
 def test_letterbox_roundtrip():
